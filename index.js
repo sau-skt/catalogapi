@@ -66,10 +66,56 @@ app.get('/get-category', async (req, res) => {
     try {
         const categories = await Category.find({ MID, SID, serviceType }).select('categoryName status');
 
-
-        res.status(200).send(categories);
+        if (!categories || categories.length === 0) {
+            res.status(200).send(categories);
+        } else {
+            res.status(200).send(categories);
+        }
     } catch (error) {
         res.status(500).send('Error retrieving categories: ' + error.message);
+    }
+});
+
+// GET route to retrieve categories by MID and SID
+app.get('/get-all-category', async (req, res) => {
+    const { MID, SID } = req.query;
+
+    if (!MID || !SID) {
+        return res.status(400).send('MID and SID are required');
+    }
+
+    try {
+        const categories = await Category.find({ MID, SID }).select('categoryName status');
+
+        if (!categories || categories.length === 0) {
+            res.status(200).send(categories);
+        } else {
+            res.status(200).send(categories);
+        }
+    } catch (error) {
+        res.status(500).send('Error retrieving categories: ' + error.message);
+    }
+});
+
+// Define the API endpoint
+app.get('/search-category', async (req, res) => {
+    const { MID, SID, categoryName } = req.query;
+
+    if (!MID || !SID || !categoryName) {
+        return res.status(400).send('MID, SID, and categoryName are required');
+    }
+
+    try {
+        const regex = new RegExp(categoryName, 'i'); // Create a case-insensitive regex
+        const services = await Category.find({
+            MID: MID,
+            SID: SID,
+            categoryName: { $regex: regex },
+        }).select('categoryName status');
+
+        res.status(200).json(services);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to fetch categories', error: error.message });
     }
 });
 
@@ -187,7 +233,7 @@ const Item = mongoose.model('item', itemSchema);
 
 // POST route to create a new item
 app.post('/create-item', async (req, res) => {
-    const { categoryId, itemName, itemDescription, itemPrice, MID, SID, status, tag} = req.body;
+    const { categoryId, itemName, itemDescription, itemPrice, MID, SID, status, tag } = req.body;
 
     if (!categoryId || !itemName || !itemDescription || !itemPrice || !MID || !SID || !status || !tag) {
         return res.status(400).send('All fields are required');
@@ -222,7 +268,7 @@ app.get('/get-items', async (req, res) => {
     try {
         const items = await Item.find({ MID, SID, categoryId }).select('itemName status itemPrice itemDescription');
 
-        
+
 
         res.status(200).send(items);
     } catch (error) {
@@ -286,6 +332,79 @@ app.put('/update-item', async (req, res) => {
         res.status(500).send('Error updating item: ' + error.message);
     }
 });
+
+// Endpoint to get the item _id based on SID, MID, categoryId, and itemName
+app.get('/get-item-id', async (req, res) => {
+    const { SID, MID, categoryId, itemName } = req.query;
+  
+    if (!SID || !MID || !categoryId || !itemName) {
+      return res.status(400).send('Missing required query parameters');
+    }
+  
+    try {
+      const item = await Item.findOne({ SID, MID, categoryId, itemName }, '_id');
+  
+      if (!item) {
+        return res.status(404).send('Item not found');
+      }
+  
+      res.status(200).json({ _id: item._id });
+    } catch (error) {
+      res.status(500).send('Internal Server Error');
+    }
+  });
+
+// Define the service schema and model
+const serviceSchema = new mongoose.Schema({
+    serviceType: { type: String, required: true },
+    MID: { type: String, required: true }
+});
+
+const Service = mongoose.model('servicetype', serviceSchema);
+
+// POST route to add a new service
+app.post('/add-service', async (req, res) => {
+    const { serviceType, MID } = req.body;
+
+    // Validate if required fields are provided
+    if (!serviceType || !MID) {
+        return res.status(400).json({ message: 'serviceType and MID are required fields' });
+    }
+
+    try {
+        // Create a new service instance
+        const newService = new Service({
+            serviceType,
+            MID
+        });
+
+        // Save the new service to the database
+        const savedService = await newService.save();
+
+        // Respond with the newly created service
+        res.status(201).json(savedService);
+    } catch (error) {
+        // Handle errors
+        res.status(500).json({ message: 'Error creating service', error: error.message });
+    }
+});
+
+// GET route to retrieve services by MID
+app.get('/get-service', async (req, res) => {
+    const { MID } = req.query;
+
+    try {
+        // Find services by MID
+        const services = await Service.find({ MID });
+
+        // Respond with the found services
+        res.status(200).json(services);
+    } catch (error) {
+        // Handle errors
+        res.status(500).json({ message: 'Error retrieving services', error: error.message });
+    }
+});
+
 
 // Start the server
 app.listen(port, () => {
