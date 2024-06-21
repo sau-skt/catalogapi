@@ -266,7 +266,7 @@ app.get('/get-items', async (req, res) => {
     }
 
     try {
-        const items = await Item.find({ MID, SID, categoryId }).select('itemName status itemPrice itemDescription');
+        const items = await Item.find({ MID, SID, categoryId }).select('itemName status itemPrice itemDescription _id');
 
 
 
@@ -405,6 +405,266 @@ app.get('/get-service', async (req, res) => {
     }
 });
 
+
+// Define a schema for the variant
+const variantSchema = new mongoose.Schema({
+    categoryId: { type: String, required: true },
+    itemId: { type: String, required: false },
+    variantName: { type: String, required: true },
+    MID: { type: String, required: true },
+    SID: { type: String, required: true },
+    status: { type: String, required: true, enum: ['Active', 'Inactive'] },
+  });
+  
+  // Create a model for the variant
+  const Variant = mongoose.model('varianttitle', variantSchema);
+  
+  // Define the POST endpoint to create a new variant
+  app.post('/create-variant-title', async (req, res) => {
+    try {
+      const { categoryId, itemId, variantName, MID, SID, status } = req.body;
+  
+      // Validate required fields
+      if (!categoryId || !variantName || !MID || !SID || !status) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+  
+      // Create a new variant document
+      const newVariant = new Variant({
+        categoryId,
+        itemId,
+        variantName,
+        MID,
+        SID,
+        status,
+      });
+  
+      // Save the new variant to the database
+      await newVariant.save();
+  
+      // Send a success response
+      res.status(201).json({ message: 'Variant created successfully', variant: newVariant });
+    } catch (error) {
+      // Handle errors
+      res.status(500).json({ error: 'Failed to create variant', details: error.message });
+    }
+  });
+
+  // Define the GET endpoint to retrieve variants based on SID, MID, and itemId
+app.get('/get-variantstitle', async (req, res) => {
+    try {
+      const { SID, MID, itemId } = req.query;
+  
+      // Validate required query parameters
+      if (!SID || !MID || !itemId) {
+        return res.status(400).json({ error: 'Missing required query parameters' });
+      }
+  
+      // Fetch variants from the database based on the query parameters
+      const variants = await Variant.find({ SID, MID, itemId });
+  
+      // Send a success response with the variants
+      res.status(200).json(variants);
+    } catch (error) {
+      // Handle errors
+      res.status(500).json({ error: 'Failed to retrieve variants', details: error.message });
+    }
+  });
+
+  app.get('/get-variantstitle-id', async (req, res) => {
+    try {
+      const { SID, MID, itemId, categoryId, variantName } = req.query;
+  
+      // Validate required query parameters
+      if (!SID || !MID || !itemId || !categoryId || !variantName) {
+        return res.status(400).json({ error: 'Missing required query parameters' });
+      }
+  
+      // Fetch variants from the database based on the query parameters
+      const variants = await Variant.findOne({ SID, MID, categoryId, itemId, categoryId, variantName }, '_id');
+  
+      // Send a success response with the variants
+      res.status(200).json(variants);
+    } catch (error) {
+      // Handle errors
+      res.status(500).json({ error: 'Failed to retrieve variants', details: error.message });
+    }
+  });
+  
+
+  // PUT route to update item status
+app.put('/update-variant-title-status', async (req, res) => {
+    const { variantTitleId } = req.body;
+
+    if (!variantTitleId) {
+        return res.status(400).send('Variant Title ID is required');
+    }
+
+    try {
+        const variant = await Variant.findById(variantTitleId);
+        if (!variant) {
+            return res.status(404).send('Variant title not found');
+        }
+
+        // Toggle status
+        variant.status = variant.status === 'Active' ? 'Inactive' : 'Active';
+        const updatedVariantTitle = await variant.save();
+
+        res.status(200).send({
+            variantName: updatedVariantTitle.variantName,
+            status: updatedVariantTitle.status
+        });
+    } catch (error) {
+        res.status(500).send('Error updating status: ' + error.message);
+    }
+});
+
+app.get('/get-variant-itemid', async (req, res) => {
+    const { MID, SID, itemName, categoryId } = req.query;
+  
+    if (!MID || !SID || !itemName || !categoryId) {
+      return res.status(400).json({ error: 'MID, SID, and itemName are required' });
+    }
+  
+    try {
+      const item = await Item.findOne({ MID, SID, itemName, categoryId });
+  
+      if (!item) {
+        return res.status(404).json({ error: 'Item not found' });
+      }
+  
+      return res.status(200).json({ _id: item._id });
+    } catch (err) {
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+// Define a schema for the variant
+const variantItemSchema = new mongoose.Schema({
+    categoryId: { type: String, required: true },
+    itemId: { type: String, required: false },
+    variantTitleId: { type: String, required: false },
+    variantItem: { type: String, required: true },
+    variantItemPrice: { type: String, required: true },
+    MID: { type: String, required: true },
+    SID: { type: String, required: true },
+    status: { type: String, required: true, enum: ['Active', 'Inactive'] },
+  });
+
+  // Create a model for the variant
+  const VariantItem = mongoose.model('variantitem', variantItemSchema);
+
+
+  app.post('/create-variant-item', async (req, res) => {
+    const {
+      categoryId,
+      itemId,
+      variantTitleId,
+      variantItem,
+      variantItemPrice,
+      MID,
+      SID,
+      status
+    } = req.body;
+
+    if (!categoryId || !variantItem || !variantItemPrice || !MID || !SID || !status) {
+      return res.status(400).json({ error: 'Required fields are missing' });
+    }
+
+    try {
+      const newVariantItem = new VariantItem({
+        categoryId,
+        itemId,
+        variantTitleId,
+        variantItem,
+        variantItemPrice,
+        MID,
+        SID,
+        status
+      });
+
+      await newVariantItem.save();
+      return res.status(201).json({ message: 'Variant item created successfully', variantItem: newVariantItem });
+    } catch (err) {
+      console.error('Error creating variant item:', err);  // Log the error details
+      return res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+});
+
+app.get('/getvariantitems', async (req, res) => {
+    const { MID, SID, variantTitleId } = req.query;
+
+    if (!MID || !SID || !variantTitleId) {
+        return res.status(400).json({ error: 'Required query parameters are missing' });
+    }
+
+    try {
+        const variantItems = await VariantItem.find({ MID, SID, variantTitleId });
+        if (!variantItems.length) {
+            return res.status(404).json({ message: 'No variant items found' });
+        }
+        res.status(200).json(variantItems);
+    } catch (err) {
+        console.error('Error retrieving variant items:', err);
+        res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+});
+
+// PUT route to update item status
+app.put('/update-variant-item-status', async (req, res) => {
+    const { variantItemId } = req.body;
+
+    if (!variantItemId) {
+        return res.status(400).send('Variant Title ID is required');
+    }
+
+    try {
+        const variant = await VariantItem.findById(variantItemId);
+        if (!variant) {
+            return res.status(404).send('Variant title not found');
+        }
+
+        // Toggle status
+        variant.status = variant.status === 'Active' ? 'Inactive' : 'Active';
+        const updatedVariantTitle = await variant.save();
+
+        res.status(200).send({
+            variantName: updatedVariantTitle.variantItem,
+            status: updatedVariantTitle.status
+        });
+    } catch (error) {
+        res.status(500).send('Error updating status: ' + error.message);
+    }
+});
+
+// PUT route to update categoryName and serviceType by categoryId
+app.put('/update-variant-item', async (req, res) => {
+    const { variantId, variantItem, variantItemPrice } = req.body;
+
+    if (!variantId || !variantItem || !variantItemPrice) {
+        return res.status(400).send('Category ID, categoryName, and serviceType are required');
+    }
+
+    try {
+        const category = await VariantItem.findById(variantId);
+        if (!category) {
+            return res.status(404).send('Category not found');
+        }
+
+        // Update categoryName and serviceType
+        category.variantItem = variantItem;
+        category.variantItemPrice = variantItemPrice;
+        const updatedCategory = await category.save();
+
+        res.status(200).send({
+            _id: updatedCategory._id,
+            variantItem: updatedCategory.variantItem,
+            variantItemPrice: updatedCategory.variantItemPrice,
+        });
+    } catch (error) {
+        res.status(500).send('Error updating category: ' + error.message);
+    }
+});
 
 // Start the server
 app.listen(port, () => {
