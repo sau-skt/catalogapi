@@ -3,6 +3,9 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const app = express();
 const port = 3001;
+const multer = require('multer');
+const csv = require('csvtojson');
+const fs = require('fs');
 
 app.use(cors({
     origin: '*',
@@ -178,23 +181,26 @@ app.put('/update-category', async (req, res) => {
 
 // DELETE route to delete a category by ID
 app.delete('/delete-category/:id', async (req, res) => {
-    const { id } = req.params;
-
-    if (!id) {
-        return res.status(400).send('Category ID is required');
-    }
+    const categoryId = req.params.id;
 
     try {
-        const deletedCategory = await Category.findByIdAndDelete(id);
-        if (!deletedCategory) {
+        // Find and delete the category
+        const category = await Category.findByIdAndDelete(categoryId);
+        if (!category) {
             return res.status(404).send('Category not found');
         }
 
-        res.status(200).send({ message: 'Category deleted successfully' });
+        // Delete all items associated with the category
+        await Item.deleteMany({ categoryId: categoryId });
+        await Variant.deleteMany({ categoryId: categoryId });
+        await VariantItem.deleteMany({ categoryId: categoryId });
+
+        res.status(200).send('Category and associated items deleted successfully');
     } catch (error) {
         res.status(500).send('Error deleting category: ' + error.message);
     }
 });
+
 
 // GET route to retrieve category ID based on parameters
 app.get('/get-item-categoryid', async (req, res) => {
@@ -336,23 +342,43 @@ app.put('/update-item', async (req, res) => {
 // Endpoint to get the item _id based on SID, MID, categoryId, and itemName
 app.get('/get-item-id', async (req, res) => {
     const { SID, MID, categoryId, itemName } = req.query;
-  
+
     if (!SID || !MID || !categoryId || !itemName) {
-      return res.status(400).send('Missing required query parameters');
+        return res.status(400).send('Missing required query parameters');
     }
-  
+
     try {
-      const item = await Item.findOne({ SID, MID, categoryId, itemName }, '_id');
-  
-      if (!item) {
-        return res.status(404).send('Item not found');
-      }
-  
-      res.status(200).json({ _id: item._id });
+        const item = await Item.findOne({ SID, MID, categoryId, itemName }, '_id');
+
+        if (!item) {
+            return res.status(404).send('Item not found');
+        }
+
+        res.status(200).json({ _id: item._id });
     } catch (error) {
-      res.status(500).send('Internal Server Error');
+        res.status(500).send('Internal Server Error');
     }
-  });
+});
+
+app.delete('/delete-item/:id', async (req, res) => {
+    const itemId = req.params.id;
+
+    try {
+        // Find and delete the category
+        const category = await Item.findByIdAndDelete(itemId);
+        if (!category) {
+            return res.status(404).send('Category not found');
+        }
+
+        // Delete all items associated with the category
+        await Variant.deleteMany({ itemId: itemId });
+        await VariantItem.deleteMany({ itemId: itemId });
+
+        res.status(200).send('Category and associated items deleted successfully');
+    } catch (error) {
+        res.status(500).send('Error deleting category: ' + error.message);
+    }
+});
 
 // Define the service schema and model
 const serviceSchema = new mongoose.Schema({
@@ -414,85 +440,85 @@ const variantSchema = new mongoose.Schema({
     MID: { type: String, required: true },
     SID: { type: String, required: true },
     status: { type: String, required: true, enum: ['Active', 'Inactive'] },
-  });
-  
-  // Create a model for the variant
-  const Variant = mongoose.model('varianttitle', variantSchema);
-  
-  // Define the POST endpoint to create a new variant
-  app.post('/create-variant-title', async (req, res) => {
-    try {
-      const { categoryId, itemId, variantName, MID, SID, status } = req.body;
-  
-      // Validate required fields
-      if (!categoryId || !variantName || !MID || !SID || !status) {
-        return res.status(400).json({ error: 'Missing required fields' });
-      }
-  
-      // Create a new variant document
-      const newVariant = new Variant({
-        categoryId,
-        itemId,
-        variantName,
-        MID,
-        SID,
-        status,
-      });
-  
-      // Save the new variant to the database
-      await newVariant.save();
-  
-      // Send a success response
-      res.status(201).json({ message: 'Variant created successfully', variant: newVariant });
-    } catch (error) {
-      // Handle errors
-      res.status(500).json({ error: 'Failed to create variant', details: error.message });
-    }
-  });
+});
 
-  // Define the GET endpoint to retrieve variants based on SID, MID, and itemId
+// Create a model for the variant
+const Variant = mongoose.model('varianttitle', variantSchema);
+
+// Define the POST endpoint to create a new variant
+app.post('/create-variant-title', async (req, res) => {
+    try {
+        const { categoryId, itemId, variantName, MID, SID, status } = req.body;
+
+        // Validate required fields
+        if (!categoryId || !variantName || !MID || !SID || !status) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Create a new variant document
+        const newVariant = new Variant({
+            categoryId,
+            itemId,
+            variantName,
+            MID,
+            SID,
+            status,
+        });
+
+        // Save the new variant to the database
+        await newVariant.save();
+
+        // Send a success response
+        res.status(201).json({ message: 'Variant created successfully', variant: newVariant });
+    } catch (error) {
+        // Handle errors
+        res.status(500).json({ error: 'Failed to create variant', details: error.message });
+    }
+});
+
+// Define the GET endpoint to retrieve variants based on SID, MID, and itemId
 app.get('/get-variantstitle', async (req, res) => {
     try {
-      const { SID, MID, itemId } = req.query;
-  
-      // Validate required query parameters
-      if (!SID || !MID || !itemId) {
-        return res.status(400).json({ error: 'Missing required query parameters' });
-      }
-  
-      // Fetch variants from the database based on the query parameters
-      const variants = await Variant.find({ SID, MID, itemId });
-  
-      // Send a success response with the variants
-      res.status(200).json(variants);
-    } catch (error) {
-      // Handle errors
-      res.status(500).json({ error: 'Failed to retrieve variants', details: error.message });
-    }
-  });
+        const { SID, MID, itemId } = req.query;
 
-  app.get('/get-variantstitle-id', async (req, res) => {
+        // Validate required query parameters
+        if (!SID || !MID || !itemId) {
+            return res.status(400).json({ error: 'Missing required query parameters' });
+        }
+
+        // Fetch variants from the database based on the query parameters
+        const variants = await Variant.find({ SID, MID, itemId });
+
+        // Send a success response with the variants
+        res.status(200).json(variants);
+    } catch (error) {
+        // Handle errors
+        res.status(500).json({ error: 'Failed to retrieve variants', details: error.message });
+    }
+});
+
+app.get('/get-variantstitle-id', async (req, res) => {
     try {
-      const { SID, MID, itemId, categoryId, variantName } = req.query;
-  
-      // Validate required query parameters
-      if (!SID || !MID || !itemId || !categoryId || !variantName) {
-        return res.status(400).json({ error: 'Missing required query parameters' });
-      }
-  
-      // Fetch variants from the database based on the query parameters
-      const variants = await Variant.findOne({ SID, MID, categoryId, itemId, categoryId, variantName }, '_id');
-  
-      // Send a success response with the variants
-      res.status(200).json(variants);
-    } catch (error) {
-      // Handle errors
-      res.status(500).json({ error: 'Failed to retrieve variants', details: error.message });
-    }
-  });
-  
+        const { SID, MID, itemId, categoryId, variantName } = req.query;
 
-  // PUT route to update item status
+        // Validate required query parameters
+        if (!SID || !MID || !itemId || !categoryId || !variantName) {
+            return res.status(400).json({ error: 'Missing required query parameters' });
+        }
+
+        // Fetch variants from the database based on the query parameters
+        const variants = await Variant.findOne({ SID, MID, categoryId, itemId, categoryId, variantName }, '_id');
+
+        // Send a success response with the variants
+        res.status(200).json(variants);
+    } catch (error) {
+        // Handle errors
+        res.status(500).json({ error: 'Failed to retrieve variants', details: error.message });
+    }
+});
+
+
+// PUT route to update item status
 app.put('/update-variant-title-status', async (req, res) => {
     const { variantTitleId } = req.body;
 
@@ -521,23 +547,42 @@ app.put('/update-variant-title-status', async (req, res) => {
 
 app.get('/get-variant-itemid', async (req, res) => {
     const { MID, SID, itemName, categoryId } = req.query;
-  
+
     if (!MID || !SID || !itemName || !categoryId) {
-      return res.status(400).json({ error: 'MID, SID, and itemName are required' });
+        return res.status(400).json({ error: 'MID, SID, and itemName are required' });
     }
-  
+
     try {
-      const item = await Item.findOne({ MID, SID, itemName, categoryId });
-  
-      if (!item) {
-        return res.status(404).json({ error: 'Item not found' });
-      }
-  
-      return res.status(200).json({ _id: item._id });
+        const item = await Item.findOne({ MID, SID, itemName, categoryId });
+
+        if (!item) {
+            return res.status(404).json({ error: 'Item not found' });
+        }
+
+        return res.status(200).json({ _id: item._id });
     } catch (err) {
-      return res.status(500).json({ error: 'Internal server error' });
+        return res.status(500).json({ error: 'Internal server error' });
     }
-  });
+});
+
+app.delete('/delete-varianttitle/:id', async (req, res) => {
+    const categoryId = req.params.id;
+
+    try {
+        // Find and delete the category
+        const category = await Variant.findByIdAndDelete(categoryId);
+        if (!category) {
+            return res.status(404).send('Category not found');
+        }
+
+        // Delete all items associated with the category
+        await VariantItem.deleteMany({ variantTitleId: categoryId });
+
+        res.status(200).send('Category and associated items deleted successfully');
+    } catch (error) {
+        res.status(500).send('Error deleting category: ' + error.message);
+    }
+});
 
 // Define a schema for the variant
 const variantItemSchema = new mongoose.Schema({
@@ -549,30 +594,14 @@ const variantItemSchema = new mongoose.Schema({
     MID: { type: String, required: true },
     SID: { type: String, required: true },
     status: { type: String, required: true, enum: ['Active', 'Inactive'] },
-  });
+});
 
-  // Create a model for the variant
-  const VariantItem = mongoose.model('variantitem', variantItemSchema);
+// Create a model for the variant
+const VariantItem = mongoose.model('variantitem', variantItemSchema);
 
 
-  app.post('/create-variant-item', async (req, res) => {
+app.post('/create-variant-item', async (req, res) => {
     const {
-      categoryId,
-      itemId,
-      variantTitleId,
-      variantItem,
-      variantItemPrice,
-      MID,
-      SID,
-      status
-    } = req.body;
-
-    if (!categoryId || !variantItem || !variantItemPrice || !MID || !SID || !status) {
-      return res.status(400).json({ error: 'Required fields are missing' });
-    }
-
-    try {
-      const newVariantItem = new VariantItem({
         categoryId,
         itemId,
         variantTitleId,
@@ -581,13 +610,29 @@ const variantItemSchema = new mongoose.Schema({
         MID,
         SID,
         status
-      });
+    } = req.body;
 
-      await newVariantItem.save();
-      return res.status(201).json({ message: 'Variant item created successfully', variantItem: newVariantItem });
+    if (!categoryId || !variantItem || !variantItemPrice || !MID || !SID || !status) {
+        return res.status(400).json({ error: 'Required fields are missing' });
+    }
+
+    try {
+        const newVariantItem = new VariantItem({
+            categoryId,
+            itemId,
+            variantTitleId,
+            variantItem,
+            variantItemPrice,
+            MID,
+            SID,
+            status
+        });
+
+        await newVariantItem.save();
+        return res.status(201).json({ message: 'Variant item created successfully', variantItem: newVariantItem });
     } catch (err) {
-      console.error('Error creating variant item:', err);  // Log the error details
-      return res.status(500).json({ error: 'Internal server error', details: err.message });
+        console.error('Error creating variant item:', err);  // Log the error details
+        return res.status(500).json({ error: 'Internal server error', details: err.message });
     }
 });
 
@@ -663,6 +708,241 @@ app.put('/update-variant-item', async (req, res) => {
         });
     } catch (error) {
         res.status(500).send('Error updating category: ' + error.message);
+    }
+});
+
+app.delete('/delete-variantItem/:id', async (req, res) => {
+    const categoryId = req.params.id;
+
+    try {
+        // Find and delete the category
+        const category = await VariantItem.findByIdAndDelete(categoryId);
+        if (!category) {
+            return res.status(404).send('Category not found');
+        }
+
+        res.status(200).send('Category and associated items deleted successfully');
+    } catch (error) {
+        res.status(500).send('Error deleting category: ' + error.message);
+    }
+});
+
+// File upload configuration
+const upload = multer({ dest: 'uploads/' });
+
+// Route to handle CSV upload
+app.post('/upload', upload.single('file'), async (req, res) => {
+    const { MID, SID } = req.body;
+    try {
+        const csvFilePath = req.file.path;
+        const jsonArray = await csv().fromFile(csvFilePath);
+
+        await Category.deleteMany({
+            MID: MID,
+            SID: SID
+        });
+
+        await Item.deleteMany({
+            MID: MID,
+            SID: SID
+        });
+
+        await Variant.deleteMany({
+            MID: MID,
+            SID: SID
+        });
+
+        await VariantItem.deleteMany({
+            MID: MID,
+            SID: SID
+        });
+
+        // Track unique categories to avoid duplicates
+        const uniqueCategories = new Set();
+
+        for (const item of jsonArray) {
+            const categoryIdentifier = `${item.CategoryName}-${item.ServiceType}-${MID}-${SID}`;
+
+            if (!uniqueCategories.has(categoryIdentifier)) {
+                const existingCategory = await Category.findOne({
+                    categoryName: item.CategoryName,
+                    serviceType: item.ServiceType,
+                    MID: MID,
+                    SID: SID,
+                });
+
+                if (!existingCategory) {
+                    uniqueCategories.add(categoryIdentifier);
+                    await Category.create({
+                        categoryName: item.CategoryName,
+                        status: 'Inactive',
+                        serviceType: item.ServiceType,
+                        MID: MID,
+                        SID: SID,
+                    });
+                }
+            }
+        }
+
+        const uniqueItems = new Set();
+
+        for (const item of jsonArray) {
+            const category = await Category.findOne({
+                MID: MID,
+                SID: SID,
+                serviceType: item.ServiceType,
+                categoryName: item.CategoryName
+            });
+
+            const itemIdentifier = `${item.ItemName}-${item.ItemDescription}-${item.ItemPrice}-${item.ItemTag}-${MID}-${SID}-${category._id}`;
+
+            if (!uniqueItems.has(itemIdentifier)) {
+                const existingItem = await Item.findOne({
+                    itemName: item.ItemName,
+                    itemDescription: item.ItemDescription,
+                    itemPrice: item.ItemPrice,
+                    itemTag: item.ItemTag,
+                    categoryId: category._id,
+                    MID: MID,
+                    SID: SID,
+                });
+
+                if (!existingItem) {
+                    uniqueItems.add(itemIdentifier);
+
+
+
+                    if (category) {
+                        await Item.create({
+                            categoryId: category._id,
+                            itemName: item.ItemName,
+                            itemDescription: item.ItemDescription,
+                            itemPrice: item.ItemPrice,
+                            MID: MID,
+                            SID: SID,
+                            status: 'Inactive',
+                            tag: item.ItemTag,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Track unique variant titles to avoid duplicates
+        const uniqueVariantTitles = new Set();
+        for (const item of jsonArray) {
+            if (!item.VariantTitle) continue;
+
+            const category = await Category.findOne({
+                MID: MID,
+                SID: SID,
+                serviceType: item.ServiceType,
+                categoryName: item.CategoryName
+            });
+
+            const items = await Item.findOne({
+                MID: MID,
+                SID: SID,
+                categoryId: category._id,
+                itemName: item.ItemName
+            });
+
+            const variantTitleIdentifier = `${item.VariantTitle}-${category._id}-${items._id}`;
+
+            if (!uniqueVariantTitles.has(variantTitleIdentifier)) {
+                const existingVariantTitle = await Variant.findOne({
+                    variantName: item.VariantTitle,
+                    categoryId: category._id,
+                    itemId: items._id,
+                    MID: MID,
+                    SID: SID,
+                });
+
+                if (!existingVariantTitle) {
+                    uniqueVariantTitles.add(variantTitleIdentifier);
+
+                    if (category && items) {
+                        await Variant.create({
+                            categoryId: category._id,
+                            itemId: items._id,
+                            variantName: item.VariantTitle,
+                            MID: MID,
+                            SID: SID,
+                            status: 'Inactive',
+                        });
+                    }
+                }
+            }
+        
+        }
+
+        // Track unique variant items to avoid duplicates
+        const uniqueVariantItems = new Set();
+        for (const item of jsonArray) {
+            if (!item.VariantItemName) continue;
+
+            
+            const category = await Category.findOne({
+                MID: MID,
+                SID: SID,
+                serviceType: item.ServiceType,
+                categoryName: item.CategoryName
+            }).select('_id');
+
+            const items = await Item.findOne({
+                MID: MID,
+                SID: SID,
+                categoryId: category._id,
+                itemName: item.ItemName
+            });
+
+            const variantTitle = await Variant.findOne({
+                MID: MID,
+                SID: SID,
+                variantName: item.VariantTitle,
+                categoryId: category._id,
+                itemId: items._id,
+            });
+
+            const variantItemIdentifier = `${item.VariantItemName}-${item.VariantItemPrice}-${category._id}-${items._id}-${variantTitle._id}`;
+
+            if (!uniqueVariantItems.has(variantItemIdentifier)) {
+                const existingVariantItem = await VariantItem.findOne({
+                    variantItem: item.VariantItemName,
+                    variantItemPrice: item.VariantItemPrice,
+                    categoryId: category._id,
+                    itemId: items._id,
+                    variantTitleId: variantTitle._id,
+                    MID: MID,
+                    SID: SID,
+                });
+
+                if (!existingVariantItem) {
+                    uniqueVariantItems.add(variantItemIdentifier);
+
+                    if (category && items && variantTitle) {
+                        await VariantItem.create({
+                            categoryId: category._id,
+                            itemId: items._id,
+                            variantTitleId: variantTitle._id,
+                            variantItem: item.VariantItemName,
+                            variantItemPrice: item.VariantItemPrice,
+                            MID: MID,
+                            SID: SID,
+                            status: 'Inactive',
+                        });
+                    }
+                }
+            }
+        }
+
+        // Delete the uploaded file after processing
+        fs.unlinkSync(csvFilePath);
+
+        res.send('CSV file uploaded and data inserted into collections');
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).send('Error uploading file');
     }
 });
 
