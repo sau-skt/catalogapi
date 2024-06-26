@@ -5,7 +5,9 @@ const app = express();
 const port = 3001;
 const multer = require('multer');
 const csv = require('csvtojson');
+const { Parser } = require('json2csv');
 const fs = require('fs');
+const path = require('path');
 
 app.use(cors({
     origin: '*',
@@ -27,7 +29,7 @@ mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
 const categorySchema = new mongoose.Schema({
     categoryName: { type: String, required: true },
     status: { type: String, required: true, enum: ['Active', 'Inactive'] },
-    serviceType: { type: String, required: true, enum: ['Takeaway', 'Dinein', 'Delivery', 'All'] },
+    serviceType: { type: String, required: true },
     MID: { type: String, required: true },
     SID: { type: String, required: true },
 });
@@ -945,6 +947,78 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         res.status(500).send('Error uploading file');
     }
 });
+
+
+app.get('/download-csv', async (req, res) => {
+    try {
+      const { MID, SID } = req.query;
+  
+      // Retrieve data from MongoDB
+      const categories = await Category.find({ MID, SID }).lean();
+      const items = await Item.find({ MID, SID }).lean();
+      const variants = await Variant.find({ MID, SID }).lean();
+      const variantItems = await VariantItem.find({ MID, SID }).lean();
+  
+      // Prepare flattened data for CSV
+      const data = [];
+  
+      items.forEach(item => {
+        const category = categories.find(cat => cat._id.toString() === item.categoryId.toString());
+        const itemData = {
+          CategoryName: category.categoryName,
+          ServiceType: category.serviceType,
+          ItemName: item.itemName,
+          ItemDescription: item.itemDescription,
+          ItemPrice: item.itemPrice,
+          ItemTag: item.tag,
+          VariantTitle: '',
+          VariantItemName: '',
+          VariantItemPrice: '',
+        };
+  
+        const itemVariants = variants.filter(variant => variant.itemId.toString() === item._id.toString());
+        itemVariants.forEach(variant => {
+          const variantItem = variantItems.find(vItem => vItem.variantTitleId.toString() === variant._id.toString());
+          if (variantItem) {
+            itemData.VariantTitle = variant.variantName;
+            itemData.VariantItemName = variantItem.variantItem;
+            itemData.VariantItemPrice = variantItem.variantItemPrice;
+  
+            // Push a copy of itemData to the result array
+            data.push({ ...itemData });
+          }
+        });
+  
+        // If no variants, push the item without variants
+        if (itemVariants.length === 0) {
+          data.push({ ...itemData });
+        }
+      });
+  
+      // Convert data to CSV format
+      const fields = ['CategoryName', 'ServiceType', 'ItemName', 'ItemDescription', 'ItemPrice', 'ItemTag', 'VariantTitle', 'VariantItemName', 'VariantItemPrice'];
+      const opts = { fields };
+      const parser = new Parser(opts);
+      const csv = parser.parse(data);
+  
+      // Write CSV to a temporary file
+      const filePath = path.join(__dirname, 'output.csv');
+      fs.writeFileSync(filePath, csv);
+  
+      // Send the CSV file to the client
+      res.download(filePath, 'output.csv', (err) => {
+        if (err) {
+          console.error('Error downloading file:', err);
+          res.status(500).send('An error occurred while downloading the file.');
+        }
+        // Remove the file after sending it
+        fs.unlinkSync(filePath);
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).send('An error occurred');
+    }
+  });
 
 // Start the server
 app.listen(port, () => {
