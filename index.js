@@ -8,6 +8,16 @@ const csv = require('csvtojson');
 const { Parser } = require('json2csv');
 const fs = require('fs');
 const path = require('path');
+const Minio = require('minio');
+
+// Initialize MinIO client
+const minioClient = new Minio.Client({
+    endPoint: 'localhost',
+    port: 9000,
+    useSSL: false,
+    accessKey: 'cpAICe7o5hzbkOaQHatS',
+    secretKey: 'CgytH4GNlvvw1RuOgSe8ZB7fbPlIXS0TwKsMjvWf'
+});
 
 app.use(cors({
     origin: '*',
@@ -730,10 +740,12 @@ app.delete('/delete-variantItem/:id', async (req, res) => {
 });
 
 // File upload configuration
-const upload = multer({ dest: 'uploads/' });
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+const destupload = multer({ dest: 'uploads/' });
 
 // Route to handle CSV upload
-app.post('/upload', upload.single('file'), async (req, res) => {
+app.post('/upload', destupload.single('file'), async (req, res) => {
     const { MID, SID } = req.body;
     try {
         const csvFilePath = req.file.path;
@@ -875,7 +887,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
                     }
                 }
             }
-        
+
         }
 
         // Track unique variant items to avoid duplicates
@@ -883,7 +895,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         for (const item of jsonArray) {
             if (!item.VariantItemName) continue;
 
-            
+
             const category = await Category.findOne({
                 MID: MID,
                 SID: SID,
@@ -951,74 +963,140 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
 app.get('/download-csv', async (req, res) => {
     try {
-      const { MID, SID } = req.query;
-  
-      // Retrieve data from MongoDB
-      const categories = await Category.find({ MID, SID }).lean();
-      const items = await Item.find({ MID, SID }).lean();
-      const variants = await Variant.find({ MID, SID }).lean();
-      const variantItems = await VariantItem.find({ MID, SID }).lean();
-  
-      // Prepare flattened data for CSV
-      const data = [];
-  
-      items.forEach(item => {
-        const category = categories.find(cat => cat._id.toString() === item.categoryId.toString());
-        const itemData = {
-          CategoryName: category.categoryName,
-          ServiceType: category.serviceType,
-          ItemName: item.itemName,
-          ItemDescription: item.itemDescription,
-          ItemPrice: item.itemPrice,
-          ItemTag: item.tag,
-          VariantTitle: '',
-          VariantItemName: '',
-          VariantItemPrice: '',
-        };
-  
-        const itemVariants = variants.filter(variant => variant.itemId.toString() === item._id.toString());
-        itemVariants.forEach(variant => {
-          const variantItem = variantItems.find(vItem => vItem.variantTitleId.toString() === variant._id.toString());
-          if (variantItem) {
-            itemData.VariantTitle = variant.variantName;
-            itemData.VariantItemName = variantItem.variantItem;
-            itemData.VariantItemPrice = variantItem.variantItemPrice;
-  
-            // Push a copy of itemData to the result array
-            data.push({ ...itemData });
-          }
+        const { MID, SID } = req.query;
+
+        // Retrieve data from MongoDB
+        const categories = await Category.find({ MID, SID }).lean();
+        const items = await Item.find({ MID, SID }).lean();
+        const variants = await Variant.find({ MID, SID }).lean();
+        const variantItems = await VariantItem.find({ MID, SID }).lean();
+
+        // Prepare flattened data for CSV
+        const data = [];
+
+        items.forEach(item => {
+            const category = categories.find(cat => cat._id.toString() === item.categoryId.toString());
+            const itemData = {
+                CategoryName: category.categoryName,
+                ServiceType: category.serviceType,
+                ItemName: item.itemName,
+                ItemDescription: item.itemDescription,
+                ItemPrice: item.itemPrice,
+                ItemTag: item.tag,
+                VariantTitle: '',
+                VariantItemName: '',
+                VariantItemPrice: '',
+            };
+
+            const itemVariants = variants.filter(variant => variant.itemId.toString() === item._id.toString());
+            itemVariants.forEach(variant => {
+                const variantItem = variantItems.find(vItem => vItem.variantTitleId.toString() === variant._id.toString());
+                if (variantItem) {
+                    itemData.VariantTitle = variant.variantName;
+                    itemData.VariantItemName = variantItem.variantItem;
+                    itemData.VariantItemPrice = variantItem.variantItemPrice;
+
+                    // Push a copy of itemData to the result array
+                    data.push({ ...itemData });
+                }
+            });
+
+            // If no variants, push the item without variants
+            if (itemVariants.length === 0) {
+                data.push({ ...itemData });
+            }
         });
-  
-        // If no variants, push the item without variants
-        if (itemVariants.length === 0) {
-          data.push({ ...itemData });
-        }
-      });
-  
-      // Convert data to CSV format
-      const fields = ['CategoryName', 'ServiceType', 'ItemName', 'ItemDescription', 'ItemPrice', 'ItemTag', 'VariantTitle', 'VariantItemName', 'VariantItemPrice'];
-      const opts = { fields };
-      const parser = new Parser(opts);
-      const csv = parser.parse(data);
-  
-      // Write CSV to a temporary file
-      const filePath = path.join(__dirname, 'output.csv');
-      fs.writeFileSync(filePath, csv);
-  
-      // Send the CSV file to the client
-      res.download(filePath, 'output.csv', (err) => {
-        if (err) {
-          console.error('Error downloading file:', err);
-          res.status(500).send('An error occurred while downloading the file.');
-        }
-        // Remove the file after sending it
-        fs.unlinkSync(filePath);
-      });
+
+        // Convert data to CSV format
+        const fields = ['CategoryName', 'ServiceType', 'ItemName', 'ItemDescription', 'ItemPrice', 'ItemTag', 'VariantTitle', 'VariantItemName', 'VariantItemPrice'];
+        const opts = { fields };
+        const parser = new Parser(opts);
+        const csv = parser.parse(data);
+
+        // Write CSV to a temporary file
+        const filePath = path.join(__dirname, 'output.csv');
+        fs.writeFileSync(filePath, csv);
+
+        // Send the CSV file to the client
+        res.download(filePath, 'output.csv', (err) => {
+            if (err) {
+                console.error('Error downloading file:', err);
+                res.status(500).send('An error occurred while downloading the file.');
+            }
+            // Remove the file after sending it
+            fs.unlinkSync(filePath);
+        });
     } catch (error) {
-      console.error('Error:', error);
-      res.status(500).send('An error occurred');
+        console.error('Error:', error);
+        res.status(500).send('An error occurred');
     }
-  });
+});
+
+app.post('/upload-image', upload.single('image'), (req, res) => {
+    if (!req.file) {
+        console.log('No file uploaded.');
+        return res.status(400).send('No file uploaded.');
+    }
+
+    // Handle file upload to MinIO
+    const file = req.file;
+    const bucketName = 'images';
+    const objectName = file.originalname;
+
+    // Ensure the bucket exists or create it
+    minioClient.bucketExists(bucketName, (err, exists) => {
+        if (err) {
+            console.error('Error checking bucket existence:', err);
+            return res.status(500).send(err);
+        }
+        if (!exists) {
+            minioClient.makeBucket(bucketName, 'us-east-1', (err) => {
+                if (err) {
+                    console.error('Error creating bucket:', err);
+                    return res.status(500).send(err);
+                }
+                uploadFile();
+            });
+        } else {
+            uploadFile();
+        }
+    });
+
+    function uploadFile() {
+        minioClient.putObject(bucketName, objectName, file.buffer, file.size, (err, etag) => {
+            if (err) {
+                console.error('Error uploading file to MinIO:', err);
+                return res.status(500).send(err);
+            }
+            console.log('File uploaded successfully. ETag:', etag);
+            res.send(`File uploaded successfully. ETag: ${etag}`);
+        });
+    }
+
+});
+
+// Route to get all image URLs from MinIO
+app.get('/images', (req, res) => {
+    const bucketName = 'images';
+    const images = [];
+
+    // List all objects (images) in the 'images' bucket
+    const stream = minioClient.listObjectsV2(bucketName, '', true);
+
+    stream.on('data', obj => {
+        const imageUrl = minioClient.protocol + '//' + minioClient.host + ':' + minioClient.port + '/' + bucketName + '/' + obj.name;
+        images.push(imageUrl);
+    });
+
+    stream.on('end', () => {
+        res.json(images);
+    });
+
+    stream.on('error', err => {
+        console.error('Error listing images:', err);
+        res.status(500).json({ error: 'Failed to fetch images' });
+    });
+});
 
 // Start the server
 app.listen(port, () => {
