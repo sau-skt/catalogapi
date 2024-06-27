@@ -244,16 +244,17 @@ const itemSchema = new mongoose.Schema({
     MID: { type: String, required: true },
     SID: { type: String, required: true },
     status: { type: String, required: true, enum: ['Active', 'Inactive'] },
-    tag: { type: String, required: true }
+    tag: { type: String, required: true },
+    imageUrl: { type: String, required: true }
 });
 
 const Item = mongoose.model('item', itemSchema);
 
 // POST route to create a new item
 app.post('/create-item', async (req, res) => {
-    const { categoryId, itemName, itemDescription, itemPrice, MID, SID, status, tag } = req.body;
+    const { categoryId, itemName, itemDescription, itemPrice, MID, SID, status, tag, imageUrl } = req.body;
 
-    if (!categoryId || !itemName || !itemDescription || !itemPrice || !MID || !SID || !status || !tag) {
+    if (!categoryId || !itemName || !itemDescription || !itemPrice || !MID || !SID || !status || !tag || !imageUrl) {
         return res.status(400).send('All fields are required');
     }
 
@@ -266,7 +267,8 @@ app.post('/create-item', async (req, res) => {
             MID,
             SID,
             status,
-            tag
+            tag,
+            imageUrl
         });
 
         const savedItem = await newItem.save();
@@ -323,9 +325,9 @@ app.put('/update-item-status', async (req, res) => {
 
 // PUT route to update an item
 app.put('/update-item', async (req, res) => {
-    const { _id, itemName, itemDescription, itemPrice, tag } = req.body;
+    const { _id, itemName, itemDescription, itemPrice, tag, imageUrl } = req.body;
 
-    if (!_id || !itemName || !itemDescription || !itemPrice || !tag) {
+    if (!_id || !itemName || !itemDescription || !itemPrice || !tag || !imageUrl) {
         return res.status(400).send('All fields are required');
     }
 
@@ -336,7 +338,8 @@ app.put('/update-item', async (req, res) => {
                 itemName,
                 itemDescription,
                 itemPrice,
-                tag
+                tag,
+                imageUrl
             },
             { new: true, runValidators: true }
         );
@@ -818,7 +821,7 @@ app.post('/upload', destupload.single('file'), async (req, res) => {
                     itemTag: item.ItemTag,
                     categoryId: category._id,
                     MID: MID,
-                    SID: SID,
+                    SID: SID
                 });
 
                 if (!existingItem) {
@@ -836,6 +839,7 @@ app.post('/upload', destupload.single('file'), async (req, res) => {
                             SID: SID,
                             status: 'Inactive',
                             tag: item.ItemTag,
+                            imageUrl: ' '
                         });
                     }
                 }

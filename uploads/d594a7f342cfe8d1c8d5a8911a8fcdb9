@@ -1,0 +1,3 @@
+CategoryName,ServiceType,ItemName,ItemDescription,ItemPrice,ItemTag,VariantTitle,VariantItemName,VariantItemPrice
+C1,Takeaway,I1,-,-,Veg,,,
+C2,Takeaway,I2,-,-,Non Veg,V2,VI2,-
