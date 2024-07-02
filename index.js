@@ -286,7 +286,7 @@ app.get('/get-items', async (req, res) => {
     }
 
     try {
-        const items = await Item.find({ MID, SID, categoryId }).select('itemName status itemPrice itemDescription _id');
+        const items = await Item.find({ MID, SID, categoryId });
 
 
 
@@ -392,6 +392,34 @@ app.delete('/delete-item/:id', async (req, res) => {
         res.status(200).send('Category and associated items deleted successfully');
     } catch (error) {
         res.status(500).send('Error deleting category: ' + error.message);
+    }
+});
+
+app.get('/search-item', async (req, res) => {
+    const { MID, SID, itemName, categoryIds } = req.query;
+
+    if (!MID || !SID || !itemName || !categoryIds) {
+        return res.status(400).send('MID, SID, itemName, and categoryIds are required');
+    }
+
+    try {
+        const categoryIdsArray = JSON.parse(categoryIds);
+
+        if (!Array.isArray(categoryIdsArray)) {
+            return res.status(400).send('categoryIds should be an array');
+        }
+
+        const regex = new RegExp(itemName, 'i'); // Create a case-insensitive regex
+        const items = await Item.find({
+            MID: MID,
+            SID: SID,
+            categoryId: { $in: categoryIdsArray },
+            itemName: { $regex: regex },
+        });
+
+        res.status(200).json(items);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to fetch items', error: error.message });
     }
 });
 
@@ -1101,6 +1129,63 @@ app.get('/images', (req, res) => {
         res.status(500).json({ error: 'Failed to fetch images' });
     });
 });
+
+// Define schema and model
+const taxSchema = new mongoose.Schema({
+    taxName: { type: String, required: true },
+    taxValue: { type: String, required: true },
+    valueType: { type: String, required: true },
+    MID: { type: String, required: true }
+});
+
+const Tax = mongoose.model('tax', taxSchema);
+
+// Endpoint to save tax data
+app.post('/savetax', async (req, res) => {
+    const {taxName, taxValue, MID, valueType } = req.body;
+  
+    const tax = new Tax({
+      taxName,
+      taxValue,
+      valueType,
+      MID,
+    });
+  
+    try {
+      const savedTax = await tax.save();
+      res.status(201).json(savedTax);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // Endpoint to get taxes based on MID
+app.get('/gettaxes/:MID', async (req, res) => {
+    const { MID } = req.params;
+  
+    try {
+      const taxes = await Tax.find({ MID });
+      res.status(200).json(taxes);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // Endpoint to remove tax based on _id
+app.delete('/removetax/:id', async (req, res) => {
+    const { id } = req.params;
+  
+    try {
+      const result = await Tax.deleteOne({ _id: id });
+      if (result.deletedCount === 1) {
+        res.status(200).json({ message: 'Tax deleted successfully' });
+      } else {
+        res.status(404).json({ message: 'Tax not found' });
+      }
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
 
 // Start the server
 app.listen(port, () => {
