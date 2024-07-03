@@ -1228,6 +1228,63 @@ app.delete('/removecharge/:id', async (req, res) => {
     }
   });
 
+// Define schema and model
+const discountSchema = new mongoose.Schema({
+    discountName: { type: String, required: true },
+    discountValue: { type: String, required: true },
+    valueType: { type: String, required: true },
+    MID: { type: String, required: true }
+});
+
+const Discount = mongoose.model('discount', discountSchema);
+
+// Endpoint to save tax data
+app.post('/savediscount', async (req, res) => {
+    const {discountName, discountValue, MID, valueType } = req.body;
+  
+    const discount = new Discount({
+      discountName,
+      discountValue,
+      valueType,
+      MID,
+    });
+  
+    try {
+      const savedDiscount = await discount.save();
+      res.status(201).json(savedDiscount);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // Endpoint to get taxes based on MID
+app.get('/getdiscounts/:MID', async (req, res) => {
+    const { MID } = req.params;
+  
+    try {
+      const discounts = await Discount.find({ MID });
+      res.status(200).json(discounts);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // Endpoint to remove tax based on _id
+app.delete('/removediscount/:id', async (req, res) => {
+    const { id } = req.params;
+  
+    try {
+      const result = await Discount.deleteOne({ _id: id });
+      if (result.deletedCount === 1) {
+        res.status(200).json({ message: 'Discount deleted successfully' });
+      } else {
+        res.status(404).json({ message: 'Discount not found' });
+      }
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
 // Start the server
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
