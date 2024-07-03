@@ -1171,16 +1171,57 @@ app.get('/gettaxes/:MID', async (req, res) => {
     }
   });
 
+// Define schema and model
+const chargeSchema = new mongoose.Schema({
+    chargeName: { type: String, required: true },
+    chargeValue: { type: String, required: true },
+    valueType: { type: String, required: true },
+    MID: { type: String, required: true }
+});
+
+const Charge = mongoose.model('charge', chargeSchema);
+
+// Endpoint to save tax data
+app.post('/savecharge', async (req, res) => {
+    const {chargeName, chargeValue, MID, valueType } = req.body;
+  
+    const charge = new Charge({
+      chargeName,
+      chargeValue,
+      valueType,
+      MID,
+    });
+  
+    try {
+      const savedCharge = await charge.save();
+      res.status(201).json(savedCharge);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // Endpoint to get taxes based on MID
+app.get('/getcharges/:MID', async (req, res) => {
+    const { MID } = req.params;
+  
+    try {
+      const charges = await Charge.find({ MID });
+      res.status(200).json(charges);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
   // Endpoint to remove tax based on _id
-app.delete('/removetax/:id', async (req, res) => {
+app.delete('/removecharge/:id', async (req, res) => {
     const { id } = req.params;
   
     try {
-      const result = await Tax.deleteOne({ _id: id });
+      const result = await Charge.deleteOne({ _id: id });
       if (result.deletedCount === 1) {
-        res.status(200).json({ message: 'Tax deleted successfully' });
+        res.status(200).json({ message: 'Charge deleted successfully' });
       } else {
-        res.status(404).json({ message: 'Tax not found' });
+        res.status(404).json({ message: 'Charge not found' });
       }
     } catch (err) {
       res.status(400).json({ message: err.message });
