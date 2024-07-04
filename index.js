@@ -1171,6 +1171,21 @@ app.get('/gettaxes/:MID', async (req, res) => {
     }
   });
 
+// DELETE endpoint to remove tax based on _id
+app.delete('/removetax/:id', async (req, res) => {
+    try {
+      const taxId = req.params.id;
+      const result = await Tax.findByIdAndDelete(taxId);
+      if (result) {
+        res.status(200).send({ message: 'Tax removed successfully' });
+      } else {
+        res.status(404).send({ message: 'Tax not found' });
+      }
+    } catch (error) {
+      res.status(500).send({ message: 'Error removing tax', error: error.message });
+    }
+  });
+
 // Define schema and model
 const chargeSchema = new mongoose.Schema({
     chargeName: { type: String, required: true },
