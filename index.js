@@ -323,6 +323,28 @@ app.put('/update-item-status', async (req, res) => {
     }
 });
 
+app.put('/update-category-item-status', async (req, res) => {
+    const { categoryId, status } = req.body;
+
+    if (!categoryId || !status) {
+        return res.status(400).send('Category ID and status are required');
+    }
+
+    try {
+        
+        // Update all items with the given categoryId
+        const result = await Item.updateMany({ categoryId: categoryId }, { $set: { status: status } });
+
+        if (result.modifiedCount > 0) {
+            res.status(200).send(`Successfully updated status for ${result.modifiedCount} items`);
+        } else {
+            res.status(404).send('No items found for the provided category ID');
+        }
+    } catch (error) {
+        res.status(500).send('Error updating status: ' + error.message);
+    }
+});
+
 // PUT route to update an item
 app.put('/update-item', async (req, res) => {
     const { _id, itemName, itemDescription, itemPrice, tag, imageUrl } = req.body;
@@ -1130,6 +1152,23 @@ app.get('/images', (req, res) => {
     });
 });
 
+app.delete('/deleteimage', async (req, res) => {
+    const { bucketName, imageName } = req.body;
+  
+    if (!bucketName || !imageName) {
+      return res.status(400).json({ message: 'Bucket name and image name are required' });
+    }
+  
+    try {
+      // Remove the object from the specified bucket
+      await minioClient.removeObject(bucketName, imageName);
+      res.status(200).json({ message: 'Image deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      res.status(500).json({ message: 'Failed to delete image', error });
+    }
+  });
+
 // Define schema and model
 const taxSchema = new mongoose.Schema({
     taxName: { type: String, required: true },
@@ -1142,49 +1181,49 @@ const Tax = mongoose.model('tax', taxSchema);
 
 // Endpoint to save tax data
 app.post('/savetax', async (req, res) => {
-    const {taxName, taxValue, MID, valueType } = req.body;
-  
-    const tax = new Tax({
-      taxName,
-      taxValue,
-      valueType,
-      MID,
-    });
-  
-    try {
-      const savedTax = await tax.save();
-      res.status(201).json(savedTax);
-    } catch (err) {
-      res.status(400).json({ message: err.message });
-    }
-  });
+    const { taxName, taxValue, MID, valueType } = req.body;
 
-  // Endpoint to get taxes based on MID
+    const tax = new Tax({
+        taxName,
+        taxValue,
+        valueType,
+        MID,
+    });
+
+    try {
+        const savedTax = await tax.save();
+        res.status(201).json(savedTax);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Endpoint to get taxes based on MID
 app.get('/gettaxes/:MID', async (req, res) => {
     const { MID } = req.params;
-  
+
     try {
-      const taxes = await Tax.find({ MID });
-      res.status(200).json(taxes);
+        const taxes = await Tax.find({ MID });
+        res.status(200).json(taxes);
     } catch (err) {
-      res.status(400).json({ message: err.message });
+        res.status(400).json({ message: err.message });
     }
-  });
+});
 
 // DELETE endpoint to remove tax based on _id
 app.delete('/removetax/:id', async (req, res) => {
     try {
-      const taxId = req.params.id;
-      const result = await Tax.findByIdAndDelete(taxId);
-      if (result) {
-        res.status(200).send({ message: 'Tax removed successfully' });
-      } else {
-        res.status(404).send({ message: 'Tax not found' });
-      }
+        const taxId = req.params.id;
+        const result = await Tax.findByIdAndDelete(taxId);
+        if (result) {
+            res.status(200).send({ message: 'Tax removed successfully' });
+        } else {
+            res.status(404).send({ message: 'Tax not found' });
+        }
     } catch (error) {
-      res.status(500).send({ message: 'Error removing tax', error: error.message });
+        res.status(500).send({ message: 'Error removing tax', error: error.message });
     }
-  });
+});
 
 // Define schema and model
 const chargeSchema = new mongoose.Schema({
@@ -1198,50 +1237,50 @@ const Charge = mongoose.model('charge', chargeSchema);
 
 // Endpoint to save tax data
 app.post('/savecharge', async (req, res) => {
-    const {chargeName, chargeValue, MID, valueType } = req.body;
-  
-    const charge = new Charge({
-      chargeName,
-      chargeValue,
-      valueType,
-      MID,
-    });
-  
-    try {
-      const savedCharge = await charge.save();
-      res.status(201).json(savedCharge);
-    } catch (err) {
-      res.status(400).json({ message: err.message });
-    }
-  });
+    const { chargeName, chargeValue, MID, valueType } = req.body;
 
-  // Endpoint to get taxes based on MID
+    const charge = new Charge({
+        chargeName,
+        chargeValue,
+        valueType,
+        MID,
+    });
+
+    try {
+        const savedCharge = await charge.save();
+        res.status(201).json(savedCharge);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Endpoint to get taxes based on MID
 app.get('/getcharges/:MID', async (req, res) => {
     const { MID } = req.params;
-  
-    try {
-      const charges = await Charge.find({ MID });
-      res.status(200).json(charges);
-    } catch (err) {
-      res.status(400).json({ message: err.message });
-    }
-  });
 
-  // Endpoint to remove tax based on _id
+    try {
+        const charges = await Charge.find({ MID });
+        res.status(200).json(charges);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Endpoint to remove tax based on _id
 app.delete('/removecharge/:id', async (req, res) => {
     const { id } = req.params;
-  
+
     try {
-      const result = await Charge.deleteOne({ _id: id });
-      if (result.deletedCount === 1) {
-        res.status(200).json({ message: 'Charge deleted successfully' });
-      } else {
-        res.status(404).json({ message: 'Charge not found' });
-      }
+        const result = await Charge.deleteOne({ _id: id });
+        if (result.deletedCount === 1) {
+            res.status(200).json({ message: 'Charge deleted successfully' });
+        } else {
+            res.status(404).json({ message: 'Charge not found' });
+        }
     } catch (err) {
-      res.status(400).json({ message: err.message });
+        res.status(400).json({ message: err.message });
     }
-  });
+});
 
 // Define schema and model
 const discountSchema = new mongoose.Schema({
@@ -1255,48 +1294,353 @@ const Discount = mongoose.model('discount', discountSchema);
 
 // Endpoint to save tax data
 app.post('/savediscount', async (req, res) => {
-    const {discountName, discountValue, MID, valueType } = req.body;
-  
-    const discount = new Discount({
-      discountName,
-      discountValue,
-      valueType,
-      MID,
-    });
-  
-    try {
-      const savedDiscount = await discount.save();
-      res.status(201).json(savedDiscount);
-    } catch (err) {
-      res.status(400).json({ message: err.message });
-    }
-  });
+    const { discountName, discountValue, MID, valueType } = req.body;
 
-  // Endpoint to get taxes based on MID
+    const discount = new Discount({
+        discountName,
+        discountValue,
+        valueType,
+        MID,
+    });
+
+    try {
+        const savedDiscount = await discount.save();
+        res.status(201).json(savedDiscount);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Endpoint to get taxes based on MID
 app.get('/getdiscounts/:MID', async (req, res) => {
     const { MID } = req.params;
+
+    try {
+        const discounts = await Discount.find({ MID });
+        res.status(200).json(discounts);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Endpoint to remove tax based on _id
+app.delete('/removediscount/:id', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const result = await Discount.deleteOne({ _id: id });
+        if (result.deletedCount === 1) {
+            res.status(200).json({ message: 'Discount deleted successfully' });
+        } else {
+            res.status(404).json({ message: 'Discount not found' });
+        }
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Define schema and model
+const customerSchema = new mongoose.Schema({
+    customerPhone: { type: String, required: true },
+    customerName: { type: String, required: true },
+    MID: { type: String, required: true }
+});
+
+const Customer = mongoose.model('customer', customerSchema);
+
+app.post('/savecustomer', async (req, res) => {
+    const { customerName, customerPhone, MID } = req.body;
+
+    try {
+        // Check if a customer with the same phone number already exists
+        const existingCustomer = await Customer.findOne({ customerPhone, MID });
+        if (existingCustomer) {
+            return res.status(400).json({ message: 'Customer phone number must be unique.' });
+        }
+
+        // Create and save the new customer
+        const customer = new Customer({
+            customerName,
+            customerPhone,
+            MID,
+        });
+
+        const savedCustomer = await customer.save();
+        res.status(201).json(savedCustomer);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+app.get('/getcustomers/:MID', async (req, res) => {
+    const { MID } = req.params;
+
+    try {
+        const customers = await Customer.find({ MID });
+        res.status(200).json(customers);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+app.delete('/removecustomer/:id', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const result = await Customer.deleteOne({ _id: id });
+        if (result.deletedCount === 1) {
+            res.status(200).json({ message: 'Customer deleted successfully' });
+        } else {
+            res.status(404).json({ message: 'Customer not found' });
+        }
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+
+
+// Define schema for sale data
+const saleSchema = new mongoose.Schema({
+    saleItems: [{ type: Object }],
+    taxes: [{ type: Object }],
+    charges: [{ type: Object }],
+    discounts: [{ type: Object }],
+    totalPrice: { type: String, required: true },
+    customerInfo: [{ type: Object }],
+    createdAt: { type: String, required: true },
+    saleStatus: { type: String, required: true, enum: ['Open', 'Closed', 'Cancelled'] },
+    salePunchedBy: { type: String, required: true },
+    mid: { type: String, required: true },
+    sid: { type: String, required: true },
+    invoiceNumber: { type: String, required: true }
+});
+
+
+// Define model for sale
+const Sale = mongoose.model('sale', saleSchema);
+
+// Route to save a new sale
+app.post('/savesale', async (req, res) => {
+    try {
+        const saleData = req.body;
+
+        // Create new Sale document
+        const newSale = new Sale(saleData);
+
+        // Save the sale to MongoDB
+        const savedSale = await newSale.save();
+        res.status(201).json(savedSale);
+    } catch (err) {
+        console.error('Error saving sale:', err);
+        res.status(500).json({ error: 'Error saving sale' });
+    }
+});
+
+// API endpoint to get all sales with saleStatus "Open" and specified sid and mid
+app.get('/getsale', async (req, res) => {
+    const { sid, mid } = req.query;
+
+    if (!sid || !mid) {
+        return res.status(400).send('sid and mid are required');
+    }
+
+    try {
+        const sales = await Sale.find({ saleStatus: 'Open', sid: sid, mid: mid });
+        res.status(200).send(sales);
+    } catch (err) {
+        res.status(500).send('Error retrieving sales: ' + err);
+    }
+});
+
+// API endpoint to get all sales with saleStatus "Open" and specified sid and mid
+app.get('/getinprocesssale', async (req, res) => {
+    const { sid, mid } = req.query;
+
+    if (!sid || !mid) {
+        return res.status(400).send('sid and mid are required');
+    }
+
+    try {
+        const sales = await Sale.find({ saleStatus: 'In Process', sid: sid, mid: mid });
+        res.status(200).send(sales);
+    } catch (err) {
+        res.status(500).send('Error retrieving sales: ' + err);
+    }
+});
+
+// API endpoint to get all sales with saleStatus "Open" and specified sid and mid
+app.get('/getclosesale', async (req, res) => {
+    const { sid, mid } = req.query;
+
+    if (!sid || !mid) {
+        return res.status(400).send('sid and mid are required');
+    }
+
+    try {
+        const sales = await Sale.find({ saleStatus: 'Close', sid: sid, mid: mid });
+        res.status(200).send(sales);
+    } catch (err) {
+        res.status(500).send('Error retrieving sales: ' + err);
+    }
+});
+
+// API endpoint to get all sales with saleStatus "Open" and specified sid and mid
+app.get('/getcancelsale', async (req, res) => {
+    const { sid, mid } = req.query;
+
+    if (!sid || !mid) {
+        return res.status(400).send('sid and mid are required');
+    }
+
+    try {
+        const sales = await Sale.find({ saleStatus: 'Cancelled', sid: sid, mid: mid });
+        res.status(200).send(sales);
+    } catch (err) {
+        res.status(500).send('Error retrieving sales: ' + err);
+    }
+});
+
+app.put('/updateSaleStatus/:id', async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
   
     try {
-      const discounts = await Discount.find({ MID });
-      res.status(200).json(discounts);
-    } catch (err) {
-      res.status(400).json({ message: err.message });
+      const updatedSale = await Sale.findByIdAndUpdate(id, {$set: { saleStatus: status }});
+  
+      if (!updatedSale) {
+        return res.status(404).json({ error: 'Sale not found' });
+      }
+  
+      res.json(updatedSale);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Server error' });
     }
   });
 
-  // Endpoint to remove tax based on _id
-app.delete('/removediscount/:id', async (req, res) => {
-    const { id } = req.params;
+  // Endpoint to fetch today's sales
+app.get('/todaysales', async (req, res) => {
+
+    const { sid, mid } = req.query;
+
+    if (!sid || !mid) {
+        return res.status(400).send('sid and mid are required');
+    }
+
+    try {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+  
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+  
+      const sales = await Sale.find({
+        createdAt: {
+          $gte: startOfDay.toISOString(),
+          $lt: endOfDay.toISOString()
+        }, saleStatus : 'Close'
+      });
+  
+      res.json(sales);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Endpoint to fetch this month's sales
+app.get('/thismonthsales', async (req, res) => {
+    const { sid, mid } = req.query;
+  
+    if (!sid || !mid) {
+      return res.status(400).send('sid and mid are required');
+    }
   
     try {
-      const result = await Discount.deleteOne({ _id: id });
-      if (result.deletedCount === 1) {
-        res.status(200).json({ message: 'Discount deleted successfully' });
-      } else {
-        res.status(404).json({ message: 'Discount not found' });
-      }
+      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+      startOfMonth.setHours(0, 0, 0, 0);
+  
+      const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
+      endOfMonth.setHours(23, 59, 59, 999);
+  
+      const sales = await Sale.find({
+        createdAt: {
+          $gte: startOfMonth.toISOString(),
+          $lt: endOfMonth.toISOString(),
+        },
+        sid,
+        mid,
+        saleStatus: 'Close'
+      });
+  
+      res.json(sales);
     } catch (err) {
-      res.status(400).json({ message: err.message });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Endpoint to fetch this month's sales
+  app.get('/selectedmonthsales', async (req, res) => {
+    const { sid, mid, startDate, endDate } = req.query;
+  
+    if (!sid || !mid || !startDate || !endDate) {
+      return res.status(400).send('sid and mid are required');
+    }
+  
+    try {
+      const sales = await Sale.find({
+        createdAt: {
+          $gte: startDate,
+          $lt: endDate,
+        },
+        sid,
+        mid,
+        saleStatus: 'Close'
+      });
+  
+      res.json(sales);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+// Define a schema and model for Invoice
+const invoiceSchema = new mongoose.Schema({
+    invoiceNumber: { type: String, required: true },
+    searchKey: { type: String, required: true },
+  });
+  
+  const Invoice = mongoose.model('invoicenumbers', invoiceSchema);
+  
+  // PUT endpoint to update the invoice number
+app.put('/updateinvoicenumber', async (req, res) => {
+    const { invoiceNumber, searchKey } = req.body;
+  
+    try {
+      let invoice = await Invoice.findOne({ searchKey });
+      if (invoice) {
+        invoice.invoiceNumber = invoiceNumber;
+        await invoice.save();
+        res.status(200).json({ message: 'Invoice number updated successfully', invoice });
+      } else {
+        res.status(404).json({ message: 'Invoice not found' });
+      }
+    } catch (error) {
+      res.status(500).json({ message: 'Internal Server Error', error });
+    }
+  });
+  
+  // GET endpoint to retrieve the invoice number
+  app.get('/getinvoicenumber', async (req, res) => {
+    try {
+      const invoice = await Invoice.findOne({ searchKey: 'search' });
+      if (invoice) {
+        res.status(200).json({ invoiceNumber: invoice.invoiceNumber, searchKey: invoice.searchKey });
+      } else {
+        res.status(404).json({ message: 'Invoice number not found' });
+      }
+    } catch (error) {
+      res.status(500).json({ message: 'Internal Server Error', error });
     }
   });
 
